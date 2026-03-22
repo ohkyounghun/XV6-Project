@@ -81,25 +81,19 @@ kalloc(void)
   return (void*)r;
 }
 
-unit64
-freeMemory(void) {
-  struct run *r;
-  unit64 total = 0;
+uint64
+freemem(void) // freemem: The function which calculates free memory
+{
+  struct run *r; // pointer for freelist
+  uint64 total = 0;
 
-  acquire(&kmem.lock);
-  /*void
-    acquire(struct spinlock *lk)
-    {
-      push_off();
-      if(holding(lk))
-        panic("acquire");
+  acquire(&kmem.lock); // Check spinlock.c
+  for(r = kmem.freelist; r; r = r->next)
+    total += PGSIZE;
+  release(&kmem.lock);
 
-      while(__sync_lock_test_and_set(&lk->locked, 1) != 0);
-
-      __sync_synchronize();
-
-      lk->cpu = mycpu();
-    } */
+  return total;
+}
 
 
 
