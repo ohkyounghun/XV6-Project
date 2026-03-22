@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# build files
+*.o
+*.d
+*.asm
+
+# xv6 build outputs
+kernel/kernel
+kernel/*.o
+user/_*
+user/*.o
+fs.img
+
+# logs
+*.log
+*.img
+
+# qemu
+*.pid
