@@ -107,3 +107,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// sys_meminfo: system call handler for meminfo()
+// This function is invoked after a trap (ecall) from user space,
+// and returns the current free memory by calling freemem().
+uint64
+sys_meminfo(void)
+{
+  return freemem();
+}
+

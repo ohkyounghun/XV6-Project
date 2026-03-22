@@ -12,10 +12,13 @@
 
 # xv6 build outputs
 kernel/kernel
-kernel/*.o
 user/_*
-user/*.o
 fs.img
+
+# generated files
+*.sym
+mkfs/mkfs
+user/usys.S
 
 # logs
 *.log
