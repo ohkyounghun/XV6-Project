@@ -33,7 +33,7 @@ void
 proc_mapstacks(pagetable_t kpgtbl)
 {
   struct proc *p;
-  
+
   for(p = proc; p < &proc[NPROC]; p++) {
     char *pa = kalloc();
     if(pa == 0)
@@ -48,7 +48,7 @@ void
 procinit(void)
 {
   struct proc *p;
-  
+
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -93,7 +93,7 @@ int
 allocpid()
 {
   int pid;
-  
+
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -223,7 +223,7 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
-  
+
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
@@ -352,7 +352,7 @@ kexit(int status)
 
   // Parent might be sleeping in wait().
   wakeup(p->parent);
-  
+
   acquire(&p->lock);
 
   p->xstate = status;
@@ -408,7 +408,7 @@ kwait(uint64 addr)
       release(&wait_lock);
       return -1;
     }
-    
+
     // Wait for a child to exit.
     sleep(p, &wait_lock);  //DOC: wait-sleep
   }
@@ -543,7 +543,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   // Must acquire p->lock in order to
   // change p->state and then call sched.
   // Once we hold p->lock, we can be
@@ -622,7 +622,7 @@ int
 killed(struct proc *p)
 {
   int k;
-  
+
   acquire(&p->lock);
   k = p->killed;
   release(&p->lock);
@@ -686,5 +686,44 @@ procdump(void)
       state = "???";
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
+  }
+}
+
+// This function based on kwait(uint64 addr)
+// The difference with kwait is that waitpid() waits only for specific pid's child.
+// after exit(), the process becomes ZOMBIE and must be cleaned up by parent
+int
+waitpid(int pid)
+{
+  struct proc *pp; // other processes
+  int found; // act like boolean
+  struct proc *p = myproc(); // // current process
+
+  acquire(&wait_lock); // protect from race condition
+
+  for(;;){ // infinite loop
+    found = 0;
+    for(pp = proc; pp < &proc[NPROC]; pp++){ // loop entire proc array,  NPROC was already defined in param.h
+      if(pp->parent == p && pp->pid == pid){ // condition 1: pp->parent == p (check whether my child or not)
+                                             // condition 2: pp->pid == pid (verify pid)
+        acquire(&pp->lock); // address of pp's lock
+
+        found = 1; // there is pid's(parameter) child
+        if(pp->state == ZOMBIE){ // check pp's state is zombie.
+          freeproc(pp); // if zombie, let it free.
+          release(&pp->lock);
+          release(&wait_lock);
+          return 0; // The plag reports success
+        }
+        release(&pp->lock);
+      }
+    }
+
+    if(!found || killed(p)){ // if no such child or current process is killed → fail
+      release(&wait_lock);
+      return -1; // The plag reports fail : no child or wrong pid
+    }
+
+    sleep(p, &wait_lock);
   }
 }

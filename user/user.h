@@ -25,6 +25,7 @@ char* sys_sbrk(int,int);
 int pause(int);
 int uptime(void);
 uint64 meminfo(void); // for meminfo().
+int waitpid(int pid);
 
 // ulib.c
 int stat(const char*, struct stat*);
