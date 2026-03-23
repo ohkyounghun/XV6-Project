@@ -20,4 +20,5 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
-#define SYS_meminfo 22 // T o identify syscall, OS need number
+#define SYS_meminfo 22 // To identify syscall, OS need number
+#define SYS_waitpid 23 // To identify syscall, OS need number
