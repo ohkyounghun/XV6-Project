@@ -108,6 +108,7 @@ sys_uptime(void)
   return xticks;
 }
 
+// AI was used (ChatGPT explained syscall wrapper structure)
 // sys_meminfo: system call handler for meminfo()
 // This function is invoked after a trap (ecall) from user space,
 // and returns the current free memory by calling freemem().
@@ -117,6 +118,7 @@ sys_meminfo(void)
   return freemem();
 }
 
+// AI was used (ChatGPT explained syscall wrapper structure)
 // sys_waitpid: System call handler for waitpid()
 uint64
 sys_waitpid(void)

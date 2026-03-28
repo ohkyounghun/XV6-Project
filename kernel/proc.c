@@ -689,6 +689,7 @@ procdump(void)
   }
 }
 
+// AI was used (ChatGPT provided guidance on waitpid structure and synchronization)
 // This function based on kwait(uint64 addr)
 // The difference with kwait is that waitpid() waits only for specific pid's child.
 // after exit(), the process becomes ZOMBIE and must be cleaned up by parent
