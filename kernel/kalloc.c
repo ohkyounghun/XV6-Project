@@ -81,6 +81,7 @@ kalloc(void)
   return (void*)r;
 }
 
+// AI was used (ChatGPT provided guidance on freelist traversal algorithm)
 uint64
 freemem(void) // freemem: The function which calculates free memory
 {
