@@ -140,6 +140,16 @@ sys_setnice(void)
   return setnice(pid, value); // Call the kernel helper and return success or failure back to user space.
 }
 
+// This sys_ps() wrapper was written with Codex assistance for the assignment.
+// It reads the pid argument from user space and forwards it to the kernel helper that prints process information.
+uint64
+sys_ps(void)
+{
+  int pid; // Store the pid argument fetched from the user register set.
+  argint(0, &pid); // Read the first syscall argument, which selects one process or all processes when it is zero.
+  return ps(pid); // Call the kernel helper and return its success code back to user space.
+}
+
 // AI was used (ChatGPT explained syscall wrapper structure)
 // sys_waitpid: System call handler for waitpid()
 uint64

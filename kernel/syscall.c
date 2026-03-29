@@ -105,6 +105,7 @@ extern uint64 sys_meminfo(void); // mapping number to actual function.
 extern uint64 sys_waitpid(void); // mapping number to actual function.
 extern uint64 sys_getnice(void); // Declare the syscall wrapper so the dispatch table can call it.
 extern uint64 sys_setnice(void); // Declare the syscall wrapper so the dispatch table can call it.
+extern uint64 sys_ps(void); // Declare the syscall wrapper so the dispatch table can call it.
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -134,6 +135,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_waitpid]  sys_waitpid, // mapping number to actual function.
 [SYS_getnice] sys_getnice, // Map the getnice syscall number to the wrapper function that handles it.
 [SYS_setnice] sys_setnice, // Map the setnice syscall number to the wrapper function that handles it.
+[SYS_ps] sys_ps, // Map the ps syscall number to the wrapper function that handles it.
 };
 
 void

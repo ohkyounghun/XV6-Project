@@ -104,6 +104,7 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 int             getnice(int pid); // Expose the kernel helper that returns a process's nice value by pid.
 int             setnice(int pid, int value); // Expose the kernel helper that updates a process's nice value by pid.
+int             ps(int pid); // Expose the kernel helper that prints process information for one pid or for all processes.
 int             waitpid(int pid);
 
 // swtch.S
