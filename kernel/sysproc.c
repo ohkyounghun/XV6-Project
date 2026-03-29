@@ -118,6 +118,16 @@ sys_meminfo(void)
   return freemem();
 }
 
+// This sys_getnice() wrapper was written with Codex assistance for the assignment.
+// It reads the pid argument from user space and forwards it to the kernel helper.
+uint64
+sys_getnice(void)
+{
+  int pid; // Store the pid argument fetched from the user register set.
+  argint(0, &pid); // Read the first syscall argument, which is the target pid.
+  return getnice(pid); // Call the kernel helper and return its result to user space.
+}
+
 // AI was used (ChatGPT explained syscall wrapper structure)
 // sys_waitpid: System call handler for waitpid()
 uint64
@@ -127,5 +137,3 @@ sys_waitpid(void)
   argint(0, &pid);
   return waitpid(pid);
 }
-
-

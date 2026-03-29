@@ -122,8 +122,9 @@ allocproc(void)
   return 0;
 
 found:
-  p->pid = allocpid();
-  p->state = USED;
+  p->pid = allocpid(); // Assign a unique process ID to the newly allocated process slot.
+  p->state = USED; // Mark this process table entry as now being used by a real process.
+  p->nice = 20; // Initialize every new process with the default nice value required by the assignment.
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -608,6 +609,25 @@ kkill(int pid)
     release(&p->lock);
   }
   return -1;
+}
+
+// This getnice() implementation was written with Codex assistance for the assignment.
+// It searches the process table and returns the nice value of the process whose pid matches the argument.
+int
+getnice(int pid)
+{
+  struct proc *p; // Iterate over the global process table one entry at a time.
+
+  for(p = proc; p < &proc[NPROC]; p++){ // Scan every process slot because xv6 stores processes in a fixed-size array.
+    acquire(&p->lock); // Hold the per-process lock before reading mutable fields from this process entry.
+    if(p->state != UNUSED && p->pid == pid){ // Only match real processes and only when the pid is the one requested by the caller.
+      int nice = p->nice; // Copy the nice value to a local variable before releasing the lock.
+      release(&p->lock); // Release the lock immediately after we finish reading the matched process entry.
+      return nice; // Return the matched process's nice value back to the syscall layer.
+    }
+    release(&p->lock); // Release the lock for non-matching entries before continuing the search.
+  }
+  return -1; // Return -1 when no process with the requested pid exists.
 }
 
 void
