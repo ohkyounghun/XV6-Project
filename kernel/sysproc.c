@@ -128,6 +128,18 @@ sys_getnice(void)
   return getnice(pid); // Call the kernel helper and return its result to user space.
 }
 
+// This sys_setnice() wrapper was written with Codex assistance for the assignment.
+// It reads the pid and value arguments from user space and forwards them to the kernel helper.
+uint64
+sys_setnice(void)
+{
+  int pid; // Store the pid argument fetched from the user register set.
+  int value; // Store the requested new nice value fetched from the user register set.
+  argint(0, &pid); // Read the first syscall argument, which is the target pid.
+  argint(1, &value); // Read the second syscall argument, which is the new nice value to apply.
+  return setnice(pid, value); // Call the kernel helper and return success or failure back to user space.
+}
+
 // AI was used (ChatGPT explained syscall wrapper structure)
 // sys_waitpid: System call handler for waitpid()
 uint64

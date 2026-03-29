@@ -45,3 +45,4 @@ entry("uptime");
 entry("meminfo");
 entry("waitpid");
 entry("getnice"); # Generate the user-space syscall stub that triggers ecall for getnice.
+entry("setnice"); # Generate the user-space syscall stub that triggers ecall for setnice.

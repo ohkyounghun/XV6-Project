@@ -630,6 +630,29 @@ getnice(int pid)
   return -1; // Return -1 when no process with the requested pid exists.
 }
 
+// This setnice() implementation was written with Codex assistance for the assignment.
+// It validates the requested nice value, finds the matching process by pid, and updates that process's nice field.
+int
+setnice(int pid, int value)
+{
+  struct proc *p; // Iterate over the global process table one entry at a time while searching for the target pid.
+
+  if(value < 0 || value > 39) // Reject any requested nice value that is outside the assignment's valid range.
+    return -1; // Return failure immediately when the requested nice value is invalid.
+
+  for(p = proc; p < &proc[NPROC]; p++){ // Scan every process slot because xv6 stores processes in a fixed-size process table.
+    acquire(&p->lock); // Hold the per-process lock before checking or updating fields inside this process entry.
+    if(p->state != UNUSED && p->pid == pid){ // Only update real processes and only when the current entry matches the requested pid.
+      p->nice = value; // Store the new nice value into the matched process structure.
+      release(&p->lock); // Release the lock as soon as the update is complete.
+      return 0; // Return success because the requested process was found and updated.
+    }
+    release(&p->lock); // Release the lock for non-matching entries before continuing the scan.
+  }
+
+  return -1; // Return failure when no process with the requested pid exists in the process table.
+}
+
 void
 setkilled(struct proc *p)
 {

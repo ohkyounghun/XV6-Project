@@ -103,6 +103,7 @@ int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 int             getnice(int pid); // Expose the kernel helper that returns a process's nice value by pid.
+int             setnice(int pid, int value); // Expose the kernel helper that updates a process's nice value by pid.
 int             waitpid(int pid);
 
 // swtch.S
