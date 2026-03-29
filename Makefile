@@ -149,6 +149,7 @@ UPROGS=\
 	$U/_waitpidTest\
 	$U/_setniceTest\
 	$U/_getniceTest\
+	$U/_psTest\
 
 
 fs.img: mkfs/mkfs README $(UPROGS)

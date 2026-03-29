@@ -653,6 +653,44 @@ setnice(int pid, int value)
   return -1; // Return failure when no process with the requested pid exists in the process table.
 }
 
+// This ps() implementation was written with Codex assistance for the assignment.
+// It walks the process table and prints either all processes or one matching process to the console.
+int
+ps(int pid)
+{
+  static char *states[] = { // Store printable names for each process state so numeric enum values become readable.
+  [UNUSED]   "UNUSED", // Map the UNUSED enum value to a readable string.
+  [USED]     "USED", // Map the USED enum value to a readable string.
+  [SLEEPING] "SLEEPING", // Map the SLEEPING enum value to a readable string.
+  [RUNNABLE] "RUNNABLE", // Map the RUNNABLE enum value to a readable string.
+  [RUNNING]  "RUNNING", // Map the RUNNING enum value to a readable string.
+  [ZOMBIE]   "ZOMBIE" // Map the ZOMBIE enum value to a readable string.
+  }; // Finish the local state-name lookup table.
+  struct proc *p; // Iterate over the global process table one entry at a time.
+  char *state; // Store the printable state string for the current process being displayed.
+
+  printf("pid state nice name\n"); // Print a header line so the process list columns are easy to read.
+
+  for(p = proc; p < &proc[NPROC]; p++){ // Scan every process slot because xv6 stores all processes in a fixed-size array.
+    acquire(&p->lock); // Hold the per-process lock before reading mutable fields from this process entry.
+
+    if(p->state != UNUSED){ // Skip completely unused slots because they do not represent active or historical processes.
+      if(pid == 0 || p->pid == pid){ // Print every process when pid is zero, or only the matching process otherwise.
+        if(p->state >= 0 && p->state < NELEM(states) && states[p->state]) // Check that the current enum value has a valid string mapping.
+          state = states[p->state]; // Use the mapped readable state string for normal cases.
+        else // Handle unexpected enum values defensively.
+          state = "UNKNOWN"; // Fall back to a safe placeholder string when the state cannot be mapped.
+
+        printf("%d %s %d %s\n", p->pid, state, p->nice, p->name); // Print the process pid, state, nice value, and name on one line.
+      } // End the pid filter branch.
+    } // End the active-slot branch.
+
+    release(&p->lock); // Release the lock before moving on to the next process table entry.
+  } // End the process-table scan loop.
+
+  return 0; // Return success even when no matching pid was found, because the assignment expects silent handling.
+}
+
 void
 setkilled(struct proc *p)
 {

@@ -28,6 +28,7 @@ uint64 meminfo(void); // for meminfo().
 int waitpid(int pid);
 int getnice(int pid); // Let user programs call getnice() with a pid and receive the process's nice value.
 int setnice(int pid, int value); // Let user programs call setnice() with a pid and a new nice value.
+int ps(int pid); // Let user programs call ps() with pid 0 for all processes or a specific pid for one process.
 
 // ulib.c
 int stat(const char*, struct stat*);

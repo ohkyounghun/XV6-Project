@@ -24,3 +24,4 @@
 #define SYS_waitpid 23 // To identify syscall, OS need number
 #define SYS_getnice 24 // Assign the next syscall number to getnice so the kernel can identify this new syscall.
 #define SYS_setnice 25 // Assign the next syscall number to setnice so the kernel can identify this new syscall.
+#define SYS_ps 26 // Assign the next syscall number to ps so the kernel can identify this new syscall.
