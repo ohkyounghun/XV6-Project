@@ -26,6 +26,7 @@ int pause(int);
 int uptime(void);
 uint64 meminfo(void); // for meminfo().
 int waitpid(int pid);
+int getnice(int pid); // Let user programs call getnice() with a pid and receive the process's nice value.
 
 // ulib.c
 int stat(const char*, struct stat*);
