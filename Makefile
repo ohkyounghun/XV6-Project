@@ -150,6 +150,8 @@ UPROGS=\
 	$U/_setniceTest\
 	$U/_getniceTest\
 	$U/_psTest\
+	$U/_mytest\
+
 
 
 fs.img: mkfs/mkfs README $(UPROGS)

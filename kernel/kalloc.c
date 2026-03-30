@@ -90,7 +90,7 @@ freemem(void) // freemem: The function which calculates free memory
 
   acquire(&kmem.lock); // Check spinlock.c
   for(r = kmem.freelist; r; r = r->next)
-    total += PGSIZE;
+    total += PGSIZE; 
   release(&kmem.lock);
 
   return total;
