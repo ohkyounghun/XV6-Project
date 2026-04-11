@@ -54,7 +54,6 @@ endif
 
 QEMU = qemu-system-riscv64
 MIN_QEMU_VERSION = 7.2
-
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
 LD = $(TOOLPREFIX)ld
@@ -151,6 +150,10 @@ UPROGS=\
 	$U/_getniceTest\
 	$U/_psTest\
 	$U/_mytest\
+	$U/_tni\
+    $U/_tcfs\
+    $U/_tnw\
+    $U/_tvr\
 
 
 

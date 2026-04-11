@@ -111,7 +111,6 @@ update_eligibility(void)
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     if(p->state == RUNNABLE || p->state == RUNNING){
-      uint64 w = nice_to_weight(p->nice);
       if(sum_vw >= (p->vruntime - v0) * sum_w)
         p->is_eligible = 1;
       else
@@ -789,7 +788,7 @@ ps(int pid)
   uint64 total_tick; // Snapshot the global tick count once so each printed row uses the same total tick value.
 
   acquire(&tickslock); // Hold the global tick lock while copying the current system tick count.
-  total_tick = (uint64)ticks * 1000ULL; // Convert the global tick count to milliticks for display.
+  total_tick = (uint64)ticks * 1000UL; // Convert the global tick count to milliticks for display.
   release(&tickslock); // Release the tick lock immediately after taking the snapshot.
 
   printf("name pid state priority weight rt/wt runtime vruntime vdeadline eligible total_tick\n"); // Print the EEVDF-oriented header line expected by the project.
@@ -810,8 +809,8 @@ ps(int pid)
                state, // Print the human-readable process state string.
                p->nice, // Print the scheduling priority in nice-value form.
                nice_to_weight(p->nice), // Print the Linux-style weight derived from the current nice value.
-               ((uint64)p->runtime * 1000ULL) / nice_to_weight(p->nice), // Print a simple integer runtime-to-weight ratio in millitick scale.
-               (uint64)p->runtime * 1000ULL, // Print the actual runtime converted from ticks to milliticks.
+               ((uint64)p->runtime * 1000UL) / nice_to_weight(p->nice), // Print a simple integer runtime-to-weight ratio in millitick scale.
+               (uint64)p->runtime * 1000UL, // Print the actual runtime converted from ticks to milliticks.
                p->vruntime, // Print the scaled virtual runtime directly because it already uses millitick-style scaling.
                p->vdeadline, // Print the scaled virtual deadline using the same internal unit as vruntime.
                p->is_eligible, // Print whether the scheduler currently considers the process eligible.
