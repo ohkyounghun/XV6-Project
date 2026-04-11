@@ -80,6 +80,47 @@ update_vdeadline(struct proc *p)
   p->vdeadline = p->vruntime + scaled_slice; // Place the virtual deadline after the current virtual runtime by one scaled slice.
 }
 
+static void
+update_eligibility(void)
+{
+  struct proc *p;
+
+  // step 1: find v0 (minimum vruntime among RUNNABLE/RUNNING)
+  uint64 v0 = (uint64)-1;
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state == RUNNABLE || p->state == RUNNING)
+      if(p->vruntime < v0) v0 = p->vruntime;
+    release(&p->lock);
+  }
+  if(v0 == (uint64)-1) v0 = 0;
+
+  // step 2: calculate sum_vw and sum_w
+  uint64 sum_vw = 0, sum_w = 0;
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state == RUNNABLE || p->state == RUNNING){
+      uint64 w = nice_to_weight(p->nice);
+      sum_vw += (p->vruntime - v0) * w;
+      sum_w  += w;
+    }
+    release(&p->lock);
+  }
+
+  // step 3: update is_eligible for each process (slide 22)
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state == RUNNABLE || p->state == RUNNING){
+      uint64 w = nice_to_weight(p->nice);
+      if(sum_vw >= (p->vruntime - v0) * sum_w)
+        p->is_eligible = 1;
+      else
+        p->is_eligible = 0;
+    }
+    release(&p->lock);
+  }
+}
+
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
@@ -504,26 +545,30 @@ scheduler(void)
     intr_on();
     intr_off();
 
-    int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+       // step 1: update eligibility for all processes (slide 22)
+    update_eligibility();
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
+    // step 2: select eligible RUNNABLE with minimum vdeadline (slide 11, 12)
+    struct proc *selected = 0;
+    for(p = proc; p < &proc[NPROC]; p++){
+      acquire(&p->lock);
+      if(p->state == RUNNABLE && p->is_eligible){
+        if(selected == 0 || p->vdeadline < selected->vdeadline)
+          selected = p;
       }
       release(&p->lock);
     }
-    if(found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
+
+    // step 3: run selected process
+    if(selected != 0){
+      acquire(&selected->lock);
+      selected->state = RUNNING;
+      c->proc = selected;
+      swtch(&c->context, &selected->context);
+      c->proc = 0;
+      release(&selected->lock);
+    } else {
+      // nothing to run
       asm volatile("wfi");
     }
   }
@@ -898,3 +943,4 @@ waitpid(int pid)
     sleep(p, &wait_lock);
   }
 }
+
