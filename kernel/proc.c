@@ -26,6 +26,20 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+// Nice-to-weight mapping table (nice range: 0~39)
+// Values for nice 0, 5, 10, 15, 20, 25, 30, 35 are from the project specification (slide 17).
+// Remaining values are referenced from the Linux kernel sched/core.c prio_to_weight table. (AI USED)
+int weight_table[40] = {
+  88761, 71755, 56483, 46273, 36291,  // nice 0~4
+  29154, 23254, 18705, 14949, 11916,  // nice 5~9
+   9548,  7620,  6100,  4904,  3906,  // nice 10~14
+   3121,  2501,  1991,  1586,  1277,  // nice 15~19
+   1024,   820,   655,   526,   423,  // nice 20~24
+    335,   272,   215,   172,   137,  // nice 25~29
+    110,    87,    70,    56,    45,  // nice 30~34
+     36,    29,    23,    18,    15   // nice 35~39
+};
+
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
@@ -125,6 +139,11 @@ found:
   p->pid = allocpid(); // Assign a unique process ID to the newly allocated process slot.
   p->state = USED; // Mark this process table entry as now being used by a real process.
   p->nice = 20; // Initialize every new process with the default nice value required by the assignment.
+  p->runtime = 0;      // initialize actual runtime
+  p->vruntime = 0;     // initialize virtual runtime
+  p->vdeadline = 0;    // initialize virtual deadline
+  p->timeslice = 5;    // default time slice
+  p->is_eligible = 1;  // all new processes start as eligible (all these code according to slide 18)
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
