@@ -69,7 +69,7 @@ reset_timeslice(struct proc *p)
   p->timeslice = DEFAULT_TIME_SLICE; // Reset a process to the fixed project time slice.
 }
 
-static void
+void
 update_vdeadline(struct proc *p)
 {
   uint64 weight = nice_to_weight(p->nice); // Read the current process weight from its nice value.

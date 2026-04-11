@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+extern int weight_table[];
 
 struct spinlock tickslock;
 uint ticks;

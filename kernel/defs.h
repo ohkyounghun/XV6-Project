@@ -106,6 +106,7 @@ int             getnice(int pid); // Expose the kernel helper that returns a pro
 int             setnice(int pid, int value); // Expose the kernel helper that updates a process's nice value by pid.
 int             ps(int pid); // Expose the kernel helper that prints process information for one pid or for all processes.
 int             waitpid(int pid);
+void update_vdeadline(struct proc *p);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
