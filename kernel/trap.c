@@ -171,6 +171,21 @@ clockintr()
     release(&tickslock);
   }
 
+  // update EEVDF parameters for the running process (slide 19)
+  struct proc *p = myproc();
+  if(p != 0 && p->state == RUNNING){
+    p->runtime++;
+    p->vruntime += (1024 * 1000) / weight_table[p->nice];
+    p->timeslice--;
+
+  // recalculate vdeadline and yield when timeslice is exhausted (slide 20)
+  if(p->timeslice == 0) {
+    p->timeslice = 5;
+    update_vdeadline(p);
+    yield();
+  }
+}
+
   // ask for the next timer interrupt. this also clears
   // the interrupt request. 1000000 is about a tenth
   // of a second.
