@@ -26,6 +26,13 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+// This EEVDF helper block was written with Codex assistance for the assignment.
+// It keeps the nice-to-weight mapping and integer-only helper functions in one place for later scheduler logic.
+#define DEFAULT_NICE 20 // Use nice 20 as the default priority for newly created xv6 processes.
+#define DEFAULT_TIME_SLICE 5 // Use a fixed 5-tick time slice exactly as required by the project slides.
+#define NICE_0_WEIGHT 1024ULL // Use the nice-20 reference weight in the project formulas for vruntime and deadline calculations.
+#define VRUNTIME_SCALE 1000ULL // Keep virtual scheduling values in millitick-style scaled integers without floating point.
+
 // Nice-to-weight mapping table (nice range: 0~39)
 // Values for nice 0, 5, 10, 15, 20, 25, 30, 35 are from the project specification (slide 17).
 // Remaining values are referenced from the Linux kernel sched/core.c prio_to_weight table. (AI USED)
@@ -39,6 +46,39 @@ int weight_table[40] = {
     110,    87,    70,    56,    45,  // nice 30~34
      36,    29,    23,    18,    15   // nice 35~39
 };
+
+static int
+clamp_nice(int nice)
+{
+  if(nice < 0) // Clamp negative nice values to the minimum valid bound.
+    return 0; // Return the minimum valid nice value.
+  if(nice > 39) // Clamp overly large nice values to the maximum valid bound.
+    return 39; // Return the maximum valid nice value.
+  return nice; // Return the original value when it is already inside the valid range.
+}
+
+static uint64
+nice_to_weight(int nice)
+{
+  return (uint64)weight_table[clamp_nice(nice)]; // Look up the Linux-style weight after defending the index range.
+}
+
+static void
+reset_timeslice(struct proc *p)
+{
+  p->timeslice = DEFAULT_TIME_SLICE; // Reset a process to the fixed project time slice.
+}
+
+static void
+update_vdeadline(struct proc *p)
+{
+  uint64 weight = nice_to_weight(p->nice); // Read the current process weight from its nice value.
+  uint64 scaled_slice = ((uint64)p->timeslice * NICE_0_WEIGHT * VRUNTIME_SCALE) / weight; // Compute the scaled virtual slice using integer math only.
+
+  if(scaled_slice < 1) // Prevent deadline advancement from becoming zero because of integer division.
+    scaled_slice = 1; // Force the minimum positive advancement to keep scheduling progress visible.
+  p->vdeadline = p->vruntime + scaled_slice; // Place the virtual deadline after the current virtual runtime by one scaled slice.
+}
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -138,12 +178,13 @@ allocproc(void)
 found:
   p->pid = allocpid(); // Assign a unique process ID to the newly allocated process slot.
   p->state = USED; // Mark this process table entry as now being used by a real process.
-  p->nice = 20; // Initialize every new process with the default nice value required by the assignment.
+  p->nice = DEFAULT_NICE; // Initialize every new process with the default nice value required by the assignment.
   p->runtime = 0;      // initialize actual runtime
   p->vruntime = 0;     // initialize virtual runtime
   p->vdeadline = 0;    // initialize virtual deadline
-  p->timeslice = 5;    // default time slice
+  p->timeslice = DEFAULT_TIME_SLICE;    // default time slice
   p->is_eligible = 1;  // all new processes start as eligible (all these code according to slide 18)
+  update_vdeadline(p); // Derive the initial virtual deadline from the default nice value and time slice.
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -309,6 +350,12 @@ kfork(void)
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
+  np->nice = p->nice; // Inherit the parent's nice value as required by the project fork rule.
+  np->runtime = 0; // Start the child with a fresh actual runtime counter.
+  np->vruntime = p->vruntime; // Inherit the parent's current virtual runtime so the child joins fairly.
+  reset_timeslice(np); // Give the child a fresh default time slice instead of inheriting the parent's remaining one.
+  np->is_eligible = 1; // Let the scheduler recalculate eligibility from a sane default after fork.
+  update_vdeadline(np); // Recompute the child's deadline using the inherited vruntime and nice value.
 
   pid = np->pid;
 
@@ -588,6 +635,8 @@ sleep(void *chan, struct spinlock *lk)
   acquire(lk);
 }
 
+// This wakeup() update was written with Codex assistance for the assignment.
+// A woken process keeps its vruntime and nice value, but receives a fresh slice and a recomputed deadline.
 // Wake up all processes sleeping on channel chan.
 // Caller should hold the condition lock.
 void
@@ -599,7 +648,10 @@ wakeup(void *chan)
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
-        p->state = RUNNABLE;
+        reset_timeslice(p); // Reset the sleeping process to the default time slice when it becomes runnable again.
+        p->is_eligible = 1; // Mark the process as ready for eligibility recomputation by the scheduler.
+        update_vdeadline(p); // Recompute the virtual deadline using the preserved vruntime and nice value.
+        p->state = RUNNABLE; // Return the process to the runnable state without forcing an immediate schedule.
       }
       release(&p->lock);
     }
@@ -650,7 +702,7 @@ getnice(int pid)
 }
 
 // This setnice() implementation was written with Codex assistance for the assignment.
-// It validates the requested nice value, finds the matching process by pid, and updates that process's nice field.
+// It updates the process nice value and immediately refreshes EEVDF metadata that depends on weight.
 int
 setnice(int pid, int value)
 {
@@ -662,7 +714,9 @@ setnice(int pid, int value)
   for(p = proc; p < &proc[NPROC]; p++){ // Scan every process slot because xv6 stores processes in a fixed-size process table.
     acquire(&p->lock); // Hold the per-process lock before checking or updating fields inside this process entry.
     if(p->state != UNUSED && p->pid == pid){ // Only update real processes and only when the current entry matches the requested pid.
-      p->nice = value; // Store the new nice value into the matched process structure.
+      p->nice = clamp_nice(value); // Store the new clamped nice value into the matched process structure.
+      p->is_eligible = 1; // Mark the process so the scheduler can reconsider its eligibility after the weight change.
+      update_vdeadline(p); // Recompute the virtual deadline because changing nice also changes the scheduling weight.
       release(&p->lock); // Release the lock as soon as the update is complete.
       return 0; // Return success because the requested process was found and updated.
     }
@@ -673,7 +727,7 @@ setnice(int pid, int value)
 }
 
 // This ps() implementation was written with Codex assistance for the assignment.
-// It walks the process table and prints either all processes or one matching process to the console.
+// It prints the EEVDF-related scheduling fields in integer millitick-style units for debugging and testing.
 int
 ps(int pid)
 {
@@ -687,8 +741,13 @@ ps(int pid)
   }; // Finish the local state-name lookup table.
   struct proc *p; // Iterate over the global process table one entry at a time.
   char *state; // Store the printable state string for the current process being displayed.
+  uint64 total_tick; // Snapshot the global tick count once so each printed row uses the same total tick value.
 
-  printf("pid state nice name\n"); // Print a header line so the process list columns are easy to read.
+  acquire(&tickslock); // Hold the global tick lock while copying the current system tick count.
+  total_tick = (uint64)ticks * 1000ULL; // Convert the global tick count to milliticks for display.
+  release(&tickslock); // Release the tick lock immediately after taking the snapshot.
+
+  printf("name pid state priority weight rt/wt runtime vruntime vdeadline eligible total_tick\n"); // Print the EEVDF-oriented header line expected by the project.
 
   for(p = proc; p < &proc[NPROC]; p++){ // Scan every process slot because xv6 stores all processes in a fixed-size array.
     acquire(&p->lock); // Hold the per-process lock before reading mutable fields from this process entry.
@@ -700,7 +759,18 @@ ps(int pid)
         else // Handle unexpected enum values defensively.
           state = "UNKNOWN"; // Fall back to a safe placeholder string when the state cannot be mapped.
 
-        printf("%d %s %d %s\n", p->pid, state, p->nice, p->name); // Print the process pid, state, nice value, and name on one line.
+        printf("%s %d %s %d %lu %lu %lu %lu %lu %d %lu\n",
+               p->name, // Print the process name first for easier visual identification.
+               p->pid, // Print the process identifier.
+               state, // Print the human-readable process state string.
+               p->nice, // Print the scheduling priority in nice-value form.
+               nice_to_weight(p->nice), // Print the Linux-style weight derived from the current nice value.
+               ((uint64)p->runtime * 1000ULL) / nice_to_weight(p->nice), // Print a simple integer runtime-to-weight ratio in millitick scale.
+               (uint64)p->runtime * 1000ULL, // Print the actual runtime converted from ticks to milliticks.
+               p->vruntime, // Print the scaled virtual runtime directly because it already uses millitick-style scaling.
+               p->vdeadline, // Print the scaled virtual deadline using the same internal unit as vruntime.
+               p->is_eligible, // Print whether the scheduler currently considers the process eligible.
+               total_tick); // Print the global tick snapshot in milliticks for reference.
       } // End the pid filter branch.
     } // End the active-slot branch.
 
