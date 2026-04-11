@@ -93,6 +93,13 @@ struct proc {
   int pid;                     // Process ID
   int nice;                    // Stores this process's nice value so each process can have its own independent nice setting.
 
+  // EEVDF scheduling fields
+  uint64 runtime;              // actual runtime in ticks
+  uint64 vruntime;             // virtual runtime (weighted)
+  uint64 vdeadline;            // virtual deadline for current timeslice
+  int    timeslice;            // remaining time slice (default: 5)
+  int    is_eligible;          // eligibility flag (1 = eligible)
+
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process
 
