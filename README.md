@@ -1,58 +1,45 @@
-# 🧠 xv6 Project 
+# 🧠 xv6 OS Project
 
-This project is based on the educational operating system **xv6 (RISC-V)**.  
-In Assignment 1, I implemented several system calls to understand how user programs interact with the kernel.
+This project extends the educational operating system **xv6 (RISC-V)**
+with custom system calls and a priority-based CPU scheduler.
 
 ---
 
-## 🚀 Implemented System Calls
+## 🚀 System Calls
 
-- **getnice(pid)**  
-  Returns the nice value of a given process.
+- **getnice(pid)** — Returns the nice value of a process
+- **setnice(pid, value)** — Updates the nice value with validation
+- **ps(pid)** — Displays process information
+- **meminfo()** — Returns free physical memory in bytes
+- **waitpid(pid)** — Waits for a specific child process
 
-- **setnice(pid, value)**  
-  Updates the nice value with proper validation (range check and process existence).
+---
 
-- **ps(pid)**  
-  Displays process information for all processes or a specific process.
+## ⚙️ CPU Scheduler (EEVDF)
 
-- **meminfo()**  
-  Returns the amount of free physical memory (in bytes) using xv6's freelist.
-
-- **waitpid(pid)**  
-  Waits for a specific child process to terminate.
+Replaced xv6's default Round-Robin scheduler with **EEVDF
+(Earliest Eligible Virtual Deadline First)** to support
+priority-based CPU time allocation using nice values.
 
 ---
 
 ## 🧩 Key Concepts
 
-- **System Call Flow**  
-  User → syscall → kernel → return value
-
-- **Process Management**  
-  - Process table traversal (`struct proc`)  
-  - Parent-child relationships  
-  - Process states (e.g., RUNNING, ZOMBIE)
-
-- **Memory Management**  
-  - Free memory tracking using freelist (`kalloc.c`)  
-  - Page-based allocation (4096 bytes per page)
-
-- **Synchronization**  
-  - Safe access to shared data using spinlocks
+- System call flow: User → syscall → kernel → return value
+- Process management: table traversal, parent-child, states
+- Memory management: freelist, page-based allocation
+- Synchronization: spinlocks for shared data
 
 ---
 
 ## 🛠 Tech Stack
 
-- Language: C  
-- OS: xv6 (RISC-V)  
-- Emulator: QEMU  
-- Environment: macOS  
+- Language: C
+- OS: xv6 (RISC-V) / QEMU / macOS
 
 ---
 
-## 👥 Collaborator
+## 👥 Collaborators
 
 - gunuzello
 
@@ -60,4 +47,4 @@ In Assignment 1, I implemented several system calls to understand how user progr
 
 ## 📄 License
 
-This project is based on xv6, which is licensed under the MIT License.
+- Based on xv6, licensed under the [MIT License](LICENSE).
