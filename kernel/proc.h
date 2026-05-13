@@ -81,6 +81,19 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+// This PA3 mmap_area definition was written with Claude assistance for the assignment.
+// Slide 20 of the project spec dictates exactly these seven fields, and slides 21~22 show that one slot is consumed per successful mmap() call (max 64 per process).
+// Free-slot convention agreed with Part B: length == 0 marks the slot as available so callers do not need a separate "in_use" flag.
+struct mmap_area {
+  struct file *f;       // Slide 20 field: file pointer for file-backed mappings, kept as 0 for anonymous so cleanup can branch on it.
+  uint64 addr;          // Slide 20 field: start virtual address of the mapping, always equal to MMAPBASE + the addr argument from user space.
+  int    length;        // Slide 20 field: mapping size in bytes; a value of 0 also serves as the project-wide "this slot is free" marker.
+  int    offset;        // Slide 20 field: file offset used by file-backed mappings, ignored when the slot is anonymous.
+  int    prot;          // Slide 20 field: protection bits (PROT_READ / PROT_READ|PROT_WRITE) checked at fault time too.
+  int    flags;         // Slide 20 field: MAP_ANONYMOUS / MAP_POPULATE flags so we know later whether the slot needs eager or lazy handling.
+  struct proc *p;       // Slide 20 field: owner process pointer used by helpers that scan the global array to filter by current owner.
+};
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -112,4 +125,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  // Slides 20~22 describe a fixed-size mmap_area table; we embed it per-process so fork/exit cleanup can touch only this proc's entries.
+  struct mmap_area mmap_areas[MAXMMAP];
 };

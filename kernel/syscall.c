@@ -106,6 +106,9 @@ extern uint64 sys_waitpid(void); // mapping number to actual function.
 extern uint64 sys_getnice(void); // Declare the syscall wrapper so the dispatch table can call it.
 extern uint64 sys_setnice(void); // Declare the syscall wrapper so the dispatch table can call it.
 extern uint64 sys_ps(void); // Declare the syscall wrapper so the dispatch table can call it.
+extern uint64 sys_mmap(void);    // Declare the Slide 11 mmap() wrapper so the dispatch table can call it.
+extern uint64 sys_munmap(void);  // Declare the Slide 26 munmap() wrapper so the dispatch table can call it.
+extern uint64 sys_freemem(void); // Declare the Slide 27 freemem() wrapper so the dispatch table can call it.
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -136,6 +139,9 @@ static uint64 (*syscalls[])(void) = {
 [SYS_getnice] sys_getnice, // Map the getnice syscall number to the wrapper function that handles it.
 [SYS_setnice] sys_setnice, // Map the setnice syscall number to the wrapper function that handles it.
 [SYS_ps] sys_ps, // Map the ps syscall number to the wrapper function that handles it.
+[SYS_mmap]    sys_mmap,    // Map the Slide 11 mmap syscall number to the wrapper function that handles it.
+[SYS_munmap]  sys_munmap,  // Map the Slide 26 munmap syscall number to the wrapper function that handles it.
+[SYS_freemem] sys_freemem, // Map the Slide 27 freemem syscall number to the wrapper function that handles it.
 };
 
 void

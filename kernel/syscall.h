@@ -25,3 +25,6 @@
 #define SYS_getnice 24 // Assign the next syscall number to getnice so the kernel can identify this new syscall.
 #define SYS_setnice 25 // Assign the next syscall number to setnice so the kernel can identify this new syscall.
 #define SYS_ps 26 // Assign the next syscall number to ps so the kernel can identify this new syscall.
+#define SYS_mmap    27 // Slide 11 mmap() syscall: assign the next free number so the kernel can identify this Project 3 syscall.
+#define SYS_munmap  28 // Slide 26 munmap() syscall: assign the next free number so the kernel can identify this Project 3 syscall.
+#define SYS_freemem 29 // Slide 27 freemem() syscall: assign the next free number so the kernel can identify this Project 3 syscall.
