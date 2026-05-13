@@ -72,21 +72,18 @@ handle_mmap_fault(struct proc *p, uint64 va, int is_read)
 
   if(m == 0)
     return 0; // Returning 0 tells usertrap that this fault was not for mmap, so it may still belong to lazy sbrk/vmfault.
-
   if(!is_read && (m->prot & PROT_WRITE) == 0)
     return -1; // A write fault on a read-only mapping is invalid and should kill the process.
 
   page_va = PGROUNDDOWN(va); // Lazy mmap is page-granular, so we only materialize the single faulting page.
   if(page_va < m->addr || page_va >= m->addr + (uint64)m->length)
     return -1; // The aligned page must still lie inside the mmap region; otherwise the access is invalid.
-
   if(walkaddr(p->pagetable, page_va) != 0)
     return 1; // If the page is already mapped, report "handled" so usertrap does not treat the fault as an unknown exception.
 
   pa = (uint64)kalloc(); // Allocate one physical page now because this is the first touch of a lazy mmap page.
   if(pa == 0)
     return -1; // Allocation failure means we cannot satisfy the user fault safely.
-
   memset((void *)pa, 0, PGSIZE); // Start from a zero-filled page so anonymous mappings and short file reads both get correct trailing zeros.
 
   if((m->flags & MAP_ANONYMOUS) == 0) { // File-backed lazy mappings must pull data from the backing file when the page is first touched.
@@ -111,7 +108,6 @@ handle_mmap_fault(struct proc *p, uint64 va, int is_read)
     kfree((void *)pa); // If installing the PTE fails, free the page so we do not leak physical memory.
     return -1; // Report failure so usertrap can kill the process rather than returning to a still-unmapped address.
   }
-
   return 1; // Returning 1 tells usertrap that the lazy mmap page was successfully materialized and execution may resume.
 }
 
@@ -249,14 +245,8 @@ cleanup_proc_mmap(struct proc *p)
   }
 }
 
-// This munmap() placeholder was written with Claude assistance for the assignment.
-// Slide 26 (Project 3 munmap() spec) is owned by Part B; we keep a stub that always reports failure so the kernel links cleanly while Part A is being verified independently.
-// Slide 26 algorithm Part B must implement here:
-//   1. Find the mmap_area whose addr matches the requested address; return -1 if none does.
-//   2. For each page in [addr, addr+length): if a PTE is present, free the physical page and clear the PTE; skip lazy pages that were never allocated.
-//   3. If the mapping was file-backed, fileclose(m->f) to drop the reference taken by mmap().
-//   4. Call clear_mmap_slot(m) so the slot reports free again.
-//   5. Return 1 on success.
+// This munmap() implementation was written with Codex assistance for the assignment.
+// Slide 26 requires removing the mapping that starts at addr, freeing any allocated pages, and dropping the file reference; lazy pages that were never faulted in are simply skipped.
 int
 munmap(uint64 addr)
 {
@@ -273,7 +263,6 @@ munmap(uint64 addr)
       break; // There can be at most one slot with a given start address because mmap() already rejects overlaps.
     }
   }
-
   if(m == 0)
     return -1; // If no recorded mapping begins at addr, the call fails exactly as the spec says.
 
@@ -291,7 +280,6 @@ munmap(uint64 addr)
 
   if(m->f)
     fileclose(m->f); // Drop the file reference taken by mmap() once the mapping is fully removed.
-
   clear_mmap_slot(m); // Mark the slot free again so later mmap() calls may reuse it.
   return 1; // munmap() returns 1 on success per the project specification.
 }
