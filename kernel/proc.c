@@ -226,6 +226,18 @@ found:
   p->is_eligible = 1;  // all new processes start as eligible (all these code according to slide 18)
   update_vdeadline(p); // Derive the initial virtual deadline from the default nice value and time slice.
 
+  // This mmap_areas reset block was written with Claude assistance for the assignment.
+  // Slides 20~22 require every newly allocated proc to start with an empty mmap table; we zero each field per Slide 20's struct layout.
+  for(int i = 0; i < MAXMMAP; i++) {
+    p->mmap_areas[i].f      = 0; // Clear the file pointer so cleanup_proc_mmap can skip slots without a leftover dangling reference.
+    p->mmap_areas[i].addr   = 0; // Reset the start virtual address so stale values from a prior owner never leak into a new process.
+    p->mmap_areas[i].length = 0; // Slide 20 free-slot convention: length == 0 marks the entry as available for the next mmap() call.
+    p->mmap_areas[i].offset = 0; // Reset the file offset because anonymous slots ignore it and file-backed slots will overwrite it.
+    p->mmap_areas[i].prot   = 0; // Reset protection bits so a permission check never trusts a previous mapping's flags.
+    p->mmap_areas[i].flags  = 0; // Reset MAP_* flags so eager/lazy decisions are recomputed on the next mmap().
+    p->mmap_areas[i].p      = 0; // Reset the owner pointer so back-references match the new struct proc after allocation completes.
+  }
+
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -256,6 +268,10 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  // This mmap cleanup hook was written with Claude assistance for the assignment.
+  // Slides 26~27 require mmap pages to be released; we run cleanup_proc_mmap() BEFORE proc_freepagetable() so leftover mmap leaves never trigger freewalk()'s "leaf" panic during exit/wait.
+  cleanup_proc_mmap(p);
+
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;

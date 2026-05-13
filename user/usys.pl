@@ -47,3 +47,6 @@ entry("waitpid");
 entry("getnice"); # Generate the user-space syscall stub that triggers ecall for getnice.
 entry("setnice"); # Generate the user-space syscall stub that triggers ecall for setnice.
 entry("ps"); # Generate the user-space syscall stub that triggers ecall for ps.
+entry("mmap");    # Generate the Slide 11 user-space stub that triggers ecall for mmap().
+entry("munmap");  # Generate the Slide 26 user-space stub that triggers ecall for munmap().
+entry("freemem"); # Generate the Slide 27 user-space stub that triggers ecall for freemem().

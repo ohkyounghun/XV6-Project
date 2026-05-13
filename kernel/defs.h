@@ -8,6 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct mmap_area;
 
 // bio.c
 void            binit(void);
@@ -59,7 +60,15 @@ void            ireclaim(int);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
-uint64          freemem(void); // for meminfo()
+uint64          freemem(void); // for meminfo() — returns bytes
+uint64          freemem_pages(void); // Slide 27 PA3 helper that returns the free-page count for the freemem() syscall.
+
+// mmap.c (Project 3 — Virtual Memory)
+uint64          mmap(uint64 addr, int length, int prot, int flags, int fd, int offset); // Slide 11 mmap() body shared between sys_mmap and any kernel-internal callers.
+int             munmap(uint64 addr); // Slide 26 munmap() body — Part B will replace the stub in kernel/mmap.c with the full implementation.
+int             is_free_mmap_slot(struct mmap_area *m); // Slide 20 free-slot predicate exported so Part B's fault handler and munmap can share the convention.
+struct mmap_area* find_mmap_area(struct proc *p, uint64 va); // Slide 20/26 helper that maps a faulting virtual address back to its owning mmap_area entry.
+void            cleanup_proc_mmap(struct proc *p); // Slide 26/27 defensive cleanup invoked from freeproc() to release any still-active mmap region on process exit.
 
 // log.c
 void            initlog(int, struct superblock*);
