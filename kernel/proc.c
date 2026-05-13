@@ -26,7 +26,7 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
-// This EEVDF helper block was written with Codex assistance for the assignment.
+// This EEVDF helper block was written with Claude (Anthropic) assistance for the assignment.
 // It keeps the nice-to-weight mapping and integer-only helper functions in one place for later scheduler logic.
 #define DEFAULT_NICE 20 // Use nice 20 as the default priority for newly created xv6 processes.
 #define DEFAULT_TIME_SLICE 5 // Use a fixed 5-tick time slice exactly as required by the project slides.
@@ -80,12 +80,13 @@ update_vdeadline(struct proc *p)
   p->vdeadline = p->vruntime + scaled_slice; // Place the virtual deadline after the current virtual runtime by one scaled slice.
 }
 
+// Claude (Anthropic) was used to help structure this implementation
 static void
 update_eligibility(void)
 {
   struct proc *p;
 
-  // step 1: find v0 (minimum vruntime among RUNNABLE/RUNNING)
+  // step 1: find v0 (minimum vruntime among RUNNABLE/RUNNING) (slide 21)
   uint64 v0 = (uint64)-1;
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
@@ -95,7 +96,7 @@ update_eligibility(void)
   }
   if(v0 == (uint64)-1) v0 = 0;
 
-  // step 2: calculate sum_vw and sum_w
+  // step 2: calculate sum_vw = Σ((vi-v0)*wi) and sum_w = Σwi (slide 21)
   uint64 sum_vw = 0, sum_w = 0;
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
@@ -528,6 +529,7 @@ kwait(uint64 addr)
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
+// Claude (Anthropic) was used to help structure this implementation
 void
 scheduler(void)
 {
@@ -544,7 +546,7 @@ scheduler(void)
     intr_on();
     intr_off();
 
-       // step 1: update eligibility for all processes (slide 22)
+    // step 1: update eligibility for all processes (slide 22)
     update_eligibility();
 
     // step 2: select eligible RUNNABLE with minimum vdeadline (slide 11, 12)
@@ -679,7 +681,7 @@ sleep(void *chan, struct spinlock *lk)
   acquire(lk);
 }
 
-// This wakeup() update was written with Codex assistance for the assignment.
+// This wakeup() update was written with Claude (Anthropic) assistance for the assignment.
 // A woken process keeps its vruntime and nice value, but receives a fresh slice and a recomputed deadline.
 // Wake up all processes sleeping on channel chan.
 // Caller should hold the condition lock.
@@ -726,7 +728,7 @@ kkill(int pid)
   return -1;
 }
 
-// This getnice() implementation was written with Codex assistance for the assignment.
+// This getnice() implementation was written with Claude (Anthropic) assistance for the assignment.
 // It searches the process table and returns the nice value of the process whose pid matches the argument.
 int
 getnice(int pid)
@@ -745,7 +747,7 @@ getnice(int pid)
   return -1; // Return -1 when no process with the requested pid exists.
 }
 
-// This setnice() implementation was written with Codex assistance for the assignment.
+// This setnice() implementation was written with Claude (Anthropic) assistance for the assignment.
 // It updates the process nice value and immediately refreshes EEVDF metadata that depends on weight.
 int
 setnice(int pid, int value)
@@ -770,7 +772,7 @@ setnice(int pid, int value)
   return -1; // Return failure when no process with the requested pid exists in the process table.
 }
 
-// This ps() implementation was written with Codex assistance for the assignment.
+// This ps() implementation was written with Claude (Anthropic) assistance for the assignment.
 // It prints the EEVDF-related scheduling fields in integer millitick-style units for debugging and testing.
 int
 ps(int pid)

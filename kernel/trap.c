@@ -172,6 +172,7 @@ clockintr()
     release(&tickslock);
   }
 
+  // Claude (Anthropic) was used to help structure this implementation
   // update EEVDF parameters for the running process (slide 19)
   struct proc *p = myproc();
   if(p != 0 && p->state == RUNNING){
@@ -188,8 +189,7 @@ clockintr()
 }
 
   // ask for the next timer interrupt. this also clears
-  // the interrupt request. 1000000 is about a tenth
-  // of a second.
+  // the interrupt request. changed from 1000000 to 100000 (slide 16)
   w_stimecmp(r_time() + 100000);
 }
 
