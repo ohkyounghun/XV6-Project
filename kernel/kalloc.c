@@ -21,6 +21,7 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  uint64 free_pages; // PA3 (Slide 27) counter that tracks the current free-page pool size so freemem() can return it in O(1).
 } kmem;
 
 void
@@ -59,6 +60,7 @@ kfree(void *pa)
   acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
+  kmem.free_pages++; // PA3 (Slide 27): increment the free-page counter so freemem() observes the page that just returned to the pool.
   release(&kmem.lock);
 }
 
@@ -72,8 +74,10 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r) {
     kmem.freelist = r->next;
+    kmem.free_pages--; // PA3 (Slide 27): decrement the free-page counter as soon as a page leaves the pool so freemem() reflects the allocation.
+  }
   release(&kmem.lock);
 
   if(r)
@@ -83,17 +87,29 @@ kalloc(void)
 
 // AI was used (ChatGPT provided guidance on freelist traversal algorithm)
 uint64
-freemem(void) // freemem: The function which calculates free memory
+freemem(void) // freemem: The function which calculates free memory in BYTES (used by meminfo)
 {
   struct run *r; // pointer for freelist
   uint64 total = 0;
 
   acquire(&kmem.lock); // Check spinlock.c
   for(r = kmem.freelist; r; r = r->next)
-    total += PGSIZE; 
+    total += PGSIZE;
   release(&kmem.lock);
 
   return total;
+}
+
+// This freemem_pages() helper was written with Claude assistance for the assignment.
+// Slide 27 of the project spec defines freemem() as "the current number of free physical memory pages", so this returns the integer page count rather than bytes (kept separate from the legacy bytes-based freemem() above to avoid breaking sys_meminfo).
+uint64
+freemem_pages(void)
+{
+  uint64 n; // Snapshot of the counter so we can release the lock before returning.
+  acquire(&kmem.lock); // Take the same lock that guards every increment/decrement in kalloc/kfree.
+  n = kmem.free_pages; // Read the counter exactly once while holding the lock to avoid a torn read on multicore.
+  release(&kmem.lock); // Release the lock before returning so callers do not run with it held.
+  return n; // Slide 27 semantics: caller sees the count at the moment we took the snapshot.
 }
 
 

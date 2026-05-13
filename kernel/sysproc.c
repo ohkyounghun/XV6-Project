@@ -159,3 +159,41 @@ sys_waitpid(void)
   argint(0, &pid);
   return waitpid(pid);
 }
+
+// This sys_mmap() wrapper was written with Claude assistance for the assignment.
+// Slide 11 of the project spec defines a 6-argument prototype, so we fetch each user-space argument with the matching helper before delegating to mmap() in kernel/mmap.c.
+uint64
+sys_mmap(void)
+{
+  uint64 addr;   // Slide 11 first argument: start address relative to MMAPBASE, fetched as a 64-bit value.
+  int length;    // Slide 11 second argument: requested mapping length in bytes, fetched as a 32-bit signed int.
+  int prot;      // Slide 11 third argument: combination of PROT_READ / PROT_WRITE bits requested by the user.
+  int flags;     // Slide 11 fourth argument: combination of MAP_ANONYMOUS / MAP_POPULATE flags selected by the user.
+  int fd;        // Slide 11 fifth argument: file descriptor for file-backed mappings or -1 for anonymous mappings.
+  int offset;    // Slide 11 sixth argument: starting file offset for file-backed mappings or 0 for anonymous mappings.
+  argaddr(0, &addr);   // Read the addr argument as a virtual address so values up to 64 bits survive the user-to-kernel transition.
+  argint(1, &length);  // Read the length argument as a 32-bit int because xv6's argint helper handles signed integers safely.
+  argint(2, &prot);    // Read the prot bitmask the user requested.
+  argint(3, &flags);   // Read the flags bitmask that selects eager/lazy and file/anonymous behavior.
+  argint(4, &fd);      // Read the fd argument so the kernel can locate p->ofile[fd] later when needed.
+  argint(5, &offset);  // Read the file offset for use by either eager loading or Part B's lazy fault handler.
+  return mmap(addr, length, prot, flags, fd, offset); // Slide 11 return contract: 0 on failure, otherwise MMAPBASE+addr from mmap().
+}
+
+// This sys_munmap() wrapper was written with Claude assistance for the assignment.
+// Slide 26 of the project spec defines munmap() as taking a single virtual address argument; Part B owns the body so this wrapper only marshals the argument and forwards.
+uint64
+sys_munmap(void)
+{
+  uint64 addr;       // Slide 26 argument: start virtual address of the mapping to remove.
+  argaddr(0, &addr); // Fetch the addr argument as a 64-bit virtual address from the user trap frame.
+  return munmap(addr); // Slide 26 return contract: 1 on success, -1 on failure (Part B implements the actual logic).
+}
+
+// This sys_freemem() wrapper was written with Claude assistance for the assignment.
+// Slide 27 of the project spec asks for the current number of free physical memory pages, so we forward to freemem_pages() which keeps an O(1) counter.
+uint64
+sys_freemem(void)
+{
+  return freemem_pages(); // Slide 27 semantics: number of free physical pages (not bytes) reflected at the moment of the call.
+}
