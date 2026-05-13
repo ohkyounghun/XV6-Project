@@ -414,6 +414,37 @@ kfork(void)
   np->is_eligible = 1; // Let the scheduler recalculate eligibility from a sane default after fork.
   update_vdeadline(np); // Recompute the child's deadline using the inherited vruntime and nice value.
 
+  // This Project 3 fork-side mmap copy block was written with Codex assistance for the assignment.
+  // It preserves every recorded mmap_area in the child and eagerly clones only the pages the parent has already faulted in, leaving untouched lazy pages to fault later in the child as well.
+  for(i = 0; i < MAXMMAP; i++) { // Walk every mmap slot because the parent may own multiple active mappings at arbitrary indices.
+    if(is_free_mmap_slot(&p->mmap_areas[i]))
+      continue; // Skip free slots so we only copy live mmap metadata into the child.
+
+    np->mmap_areas[i] = p->mmap_areas[i]; // Copy the metadata first so the child sees the same virtual region layout as the parent.
+    np->mmap_areas[i].p = np; // Rebind the owner pointer because the copied slot now belongs to the child process structure.
+    if(np->mmap_areas[i].f)
+      np->mmap_areas[i].f = filedup(np->mmap_areas[i].f); // Take a fresh file reference for child cleanup/munmap independent of the parent.
+
+    for(uint64 off = 0; off < (uint64)np->mmap_areas[i].length; off += PGSIZE) { // Copy only page-sized chunks because mmap and page faults are page-granular in xv6.
+      uint64 va = np->mmap_areas[i].addr + off; // Reuse the exact same virtual address in the child, as required by the project spec.
+      pte_t *pte = walk(p->pagetable, va, 0); // Check whether the parent has already materialized this mmap page.
+      char *mem; // Allocate a fresh child physical page only when the parent mapping already has a valid page to copy.
+
+      if(pte == 0 || (*pte & PTE_V) == 0)
+        continue; // Leave lazy, never-faulted pages untouched so the child faults them in later on demand.
+
+      mem = kalloc(); // Allocate a new physical page so the child does not share writable mmap pages directly with the parent.
+      if(mem == 0)
+        goto bad; // Abort fork cleanly when physical memory is exhausted during mmap page cloning.
+
+      memmove(mem, (char *)PTE2PA(*pte), PGSIZE); // Copy the parent's current page contents so file-backed and anonymous mappings preserve visible data.
+      if(mappages(np->pagetable, va, PGSIZE, (uint64)mem, PTE_FLAGS(*pte)) != 0) {
+        kfree(mem); // Return the page before aborting if the child PTE cannot be installed.
+        goto bad; // Reuse the common fork failure path so freeproc() cleans partial mmap metadata/pages for us.
+      }
+    }
+  }
+
   pid = np->pid;
 
   release(&np->lock);
@@ -427,6 +458,11 @@ kfork(void)
   release(&np->lock);
 
   return pid;
+
+bad:
+  freeproc(np); // Release any partially copied mmap pages/metadata and ordinary process resources before returning failure.
+  release(&np->lock); // Match allocproc's locked return convention before leaving through the error path.
+  return -1; // Propagate fork failure to user space when mmap page cloning cannot be completed.
 }
 
 // Pass p's abandoned children to init.
@@ -960,4 +996,3 @@ waitpid(int pid)
     sleep(p, &wait_lock);
   }
 }
-

@@ -58,6 +58,63 @@ clear_mmap_slot(struct mmap_area *m)
   m->p      = 0; // Reset the owner pointer so back-references from helpers do not survive past the slot's release.
 }
 
+// This handle_mmap_fault() helper was written with Codex assistance for the assignment.
+// It handles exactly one lazy mmap page at a time: validate the faulting address, enforce permissions, allocate/load one page, and install the user PTE.
+int
+handle_mmap_fault(struct proc *p, uint64 va, int is_read)
+{
+  struct mmap_area *m = find_mmap_area(p, va); // Look up which recorded mmap region owns the faulting address, if any.
+  uint64 page_va; // Keep the aligned virtual page address separate from the raw fault address reported by the trap hardware.
+  uint64 file_off; // Track the file offset for this page so file-backed lazy mappings load the correct bytes.
+  uint64 pa; // Hold the newly allocated physical page address once kalloc succeeds.
+  int perm = PTE_U; // Every mmap page is user-accessible, so start from the user bit and add R/W bits from prot below.
+  int n; // Capture the number of bytes read from a file-backed mapping so short reads can be zero-filled safely.
+
+  if(m == 0)
+    return 0; // Returning 0 tells usertrap that this fault was not for mmap, so it may still belong to lazy sbrk/vmfault.
+
+  if(!is_read && (m->prot & PROT_WRITE) == 0)
+    return -1; // A write fault on a read-only mapping is invalid and should kill the process.
+
+  page_va = PGROUNDDOWN(va); // Lazy mmap is page-granular, so we only materialize the single faulting page.
+  if(page_va < m->addr || page_va >= m->addr + (uint64)m->length)
+    return -1; // The aligned page must still lie inside the mmap region; otherwise the access is invalid.
+
+  if(walkaddr(p->pagetable, page_va) != 0)
+    return 1; // If the page is already mapped, report "handled" so usertrap does not treat the fault as an unknown exception.
+
+  pa = (uint64)kalloc(); // Allocate one physical page now because this is the first touch of a lazy mmap page.
+  if(pa == 0)
+    return -1; // Allocation failure means we cannot satisfy the user fault safely.
+
+  memset((void *)pa, 0, PGSIZE); // Start from a zero-filled page so anonymous mappings and short file reads both get correct trailing zeros.
+
+  if((m->flags & MAP_ANONYMOUS) == 0) { // File-backed lazy mappings must pull data from the backing file when the page is first touched.
+    file_off = (uint64)m->offset + (page_va - m->addr); // Convert the page's virtual offset inside the mapping into the matching file offset.
+    ilock(m->f->ip); // Hold the inode lock while reading file contents into the freshly allocated page.
+    n = readi(m->f->ip, 0, pa, file_off, PGSIZE); // Read at most one page because the project handles page faults one page at a time.
+    iunlock(m->f->ip); // Release the inode lock immediately after the read completes.
+    if(n < 0) {
+      kfree((void *)pa); // Return the page before failing so the free-page count stays accurate.
+      return -1; // A file read error means the fault cannot be satisfied.
+    }
+    if(n < PGSIZE)
+      memset((void *)(pa + n), 0, PGSIZE - n); // Zero-fill the unread tail when the file is shorter than the mapped page span.
+  }
+
+  if(m->prot & PROT_READ)
+    perm |= PTE_R; // Add read permission when the mapping was created as readable.
+  if(m->prot & PROT_WRITE)
+    perm |= PTE_W; // Add write permission when the mapping was created as writable.
+
+  if(mappages(p->pagetable, page_va, PGSIZE, pa, perm) != 0) {
+    kfree((void *)pa); // If installing the PTE fails, free the page so we do not leak physical memory.
+    return -1; // Report failure so usertrap can kill the process rather than returning to a still-unmapped address.
+  }
+
+  return 1; // Returning 1 tells usertrap that the lazy mmap page was successfully materialized and execution may resume.
+}
+
 // This mmap() implementation was written with Claude assistance for the assignment.
 // Slide 11 fixes the prototype, Slide 12 explains the MAP_POPULATE/MAP_ANONYMOUS flag matrix, Slide 13 enumerates every failure return, and Slides 14~18 walk through eager vs lazy behavior — each block below matches one of those slide pieces.
 uint64
@@ -203,6 +260,38 @@ cleanup_proc_mmap(struct proc *p)
 int
 munmap(uint64 addr)
 {
-  (void)addr; // Silence the unused-argument warning while this stub stands in for Part B's real logic.
-  return -1;  // Slide 26 failure contract: -1 means "no matching mapping" — the safest answer until Part B replaces this body.
+  struct proc *p = myproc(); // munmap() always operates on the current process's mapping table.
+  struct mmap_area *m = 0; // Keep the matched slot pointer so the page teardown and slot cleanup use the same metadata entry.
+  uint64 npages; // Cache the mapping length in pages because both the PTE cleanup loop and return path need it.
+
+  if(addr % PGSIZE != 0)
+    return -1; // The project requires the unmap start address itself to be page-aligned.
+
+  for(int i = 0; i < MAXMMAP; i++) { // Search the process-local mmap table for the region whose start address matches the request exactly.
+    if(!is_free_mmap_slot(&p->mmap_areas[i]) && p->mmap_areas[i].addr == addr) {
+      m = &p->mmap_areas[i]; // Remember the matching slot so the teardown loop can use its length/file metadata.
+      break; // There can be at most one slot with a given start address because mmap() already rejects overlaps.
+    }
+  }
+
+  if(m == 0)
+    return -1; // If no recorded mapping begins at addr, the call fails exactly as the spec says.
+
+  npages = (uint64)m->length / PGSIZE; // munmap() must visit each page so lazy and eager pages can be handled uniformly.
+  for(uint64 i = 0; i < npages; i++) {
+    uint64 va = m->addr + i * PGSIZE; // Compute the virtual address of the current page inside the mapping.
+    pte_t *pte = walk(p->pagetable, va, 0); // Probe the leaf PTE without allocating intermediate tables because lazy pages may still be absent.
+    if(pte == 0)
+      continue; // Missing page-table levels mean this page was never faulted in, so there is nothing to free.
+    if((*pte & PTE_V) == 0)
+      continue; // Invalid leaf entries are also fine for lazy pages that were recorded but never allocated.
+    kfree((void *)PTE2PA(*pte)); // Free only the physical pages that were actually allocated so freemem() rises by the correct amount.
+    *pte = 0; // Clear the leaf entry so later walks and freewalk() see the page as unmapped.
+  }
+
+  if(m->f)
+    fileclose(m->f); // Drop the file reference taken by mmap() once the mapping is fully removed.
+
+  clear_mmap_slot(m); // Mark the slot free again so later mmap() calls may reuse it.
+  return 1; // munmap() returns 1 on success per the project specification.
 }

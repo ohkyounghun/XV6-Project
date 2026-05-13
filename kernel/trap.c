@@ -69,9 +69,20 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if((r_scause() == 15 || r_scause() == 13) &&
-            vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
-    // page fault on lazily-allocated page
+  } else if(r_scause() == 15 || r_scause() == 13){
+    // This Project 3 mmap fault branch was written with Codex assistance for the assignment.
+    // It first gives lazy mmap a chance to materialize one page, and only falls back to the older lazy-sbrk vmfault() path when the faulting address does not belong to any mmap region.
+    int mmap_fault = handle_mmap_fault(p, r_stval(), r_scause() == 13); // Let mmap.c decide whether this address belongs to a lazy mmap region and, if so, allocate/load exactly one page.
+    if(mmap_fault > 0) {
+      // handled by lazy mmap
+    } else if(mmap_fault == 0 &&
+              vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
+      // page fault on lazily-allocated sbrk page
+    } else {
+      printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid); // Report the fault when neither lazy mmap nor lazy sbrk can satisfy it.
+      printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval()); // Print the fault PC and address to help debug invalid accesses during testing.
+      setkilled(p); // Kill the process because the faulting access is invalid or could not be satisfied safely.
+    }
   } else {
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
@@ -232,4 +243,3 @@ devintr()
     return 0;
   }
 }
-
