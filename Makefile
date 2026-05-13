@@ -156,6 +156,7 @@ UPROGS=\
     $U/_tcfs\
     $U/_tnw\
     $U/_tvr\
+	$U/_pa3_test\
 
 
 
