@@ -69,7 +69,35 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if(r_scause() == 15 || r_scause() == 13){
+  } else if(r_scause() == 12 || r_scause() == 13 || r_scause() == 15){
+    // The scause-12 (instruction-fetch) coverage and the "check swap BEFORE the
+    // lazy paths" ordering were worked out with Claude assistance for the
+    // assignment; Xv6_part4_PageReplacement.pptx (Slide 18) only says a swapped
+    // page raises a fault, not which scause codes or the ordering vs lazy alloc.
+    // PA4: a swapped-out page faults with PTE_V==0 && PTE_S==1. ANY access kind
+    // can hit a swapped page, so we must cover instruction-fetch (12), load (13)
+    // AND store (15) faults — a code page that gets evicted faults with scause
+    // 12 on the next instruction fetch, not 13/15. Check this BEFORE the
+    // lazy-mmap / lazy-sbrk paths: those would allocate a brand-new zero page
+    // and clobber the swap-slot reference stored in the PTE.
+    pte_t *spte = walk(p->pagetable, PGROUNDDOWN(r_stval()), 0);
+    if(spte != 0 && (*spte & PTE_V) == 0 && (*spte & PTE_S)){
+      // swap_in restores the page and re-validates the PTE; the faulting
+      // instruction then re-executes. Failure means RAM+swap are exhausted,
+      // which is fatal for this access.
+      if(swap_in(p->pagetable, r_stval()) != 0)
+        setkilled(p);
+      goto faultdone;
+    }
+    if(r_scause() == 12){
+      // An instruction-fetch fault that is NOT a swapped page is a genuine bad
+      // jump (lazy mmap/sbrk only ever back data, never executable text), so
+      // there is nothing to materialize here — treat it as fatal.
+      printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+      setkilled(p);
+      goto faultdone;
+    }
     // This Project 3 mmap fault branch was written with Codex assistance for the assignment.
     // It first gives lazy mmap a chance to materialize one page, and only falls back to the older lazy-sbrk vmfault() path when the faulting address does not belong to any mmap region.
     int mmap_fault = handle_mmap_fault(p, r_stval(), r_scause() == 13); // Let mmap.c decide whether this address belongs to a lazy mmap region and, if so, allocate/load exactly one page.
@@ -89,6 +117,7 @@ usertrap(void)
     setkilled(p);
   }
 
+ faultdone:
   if(killed(p))
     kexit(-1);
 

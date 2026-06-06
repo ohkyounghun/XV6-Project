@@ -26,3 +26,12 @@ user/usys.S
 
 # qemu
 *.pid
+
+# Microsoft Office temp files
+~$*
+
+# Claude Code config
+CLAUDE.md
+
+# PA4 scaffolding / helper scripts (not part of the kernel submission)
+scaffolding/

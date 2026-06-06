@@ -50,3 +50,4 @@ entry("ps"); # Generate the user-space syscall stub that triggers ecall for ps.
 entry("mmap");    # Generate the Slide 11 user-space stub that triggers ecall for mmap().
 entry("munmap");  # Generate the Slide 26 user-space stub that triggers ecall for munmap().
 entry("freemem"); # Generate the Slide 27 user-space stub that triggers ecall for freemem().
+entry("swapstat"); # PA4 Slide 16/26: generate the user-space ecall stub for swapstat() so test programs can read swap I/O counters.

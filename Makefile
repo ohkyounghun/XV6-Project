@@ -29,8 +29,11 @@ OBJS = \
   $K/kernelvec.o \
   $K/plic.o \
   $K/virtio_disk.o \
-  $K/mmap.o
+  $K/mmap.o\
+  $K/swap.o\
+  $K/lru.o
 # Project 3 (Slides 10~27): kernel/mmap.c provides mmap/munmap/freemem helpers and is appended to OBJS so it is linked into the kernel.
+# PA4 Slide 31: add swap.c (Slide 13/18 swap-out/in) and lru.c (Slide 22/24 LRU list + Clock algorithm) to OBJS so they link into the kernel.
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
@@ -157,6 +160,8 @@ UPROGS=\
     $U/_tnw\
     $U/_tvr\
 	$U/_pa3_test\
+	$U/_pa4_test\
+# PA4 Slide 30: pa4_test registered above so it is built into fs.img and runnable from the xv6 shell.
 
 
 

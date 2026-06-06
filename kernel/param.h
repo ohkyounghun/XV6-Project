@@ -9,7 +9,10 @@
 #define MAXOPBLOCKS  10  // max # of blocks any FS op writes
 #define LOGBLOCKS    (MAXOPBLOCKS*3)  // max data blocks in on-disk log
 #define NBUF         (MAXOPBLOCKS*3)  // size of disk block cache
-#define FSSIZE       2000  // size of file system in blocks
+// PA4 Slide 21: expand fs.img from 2000 to 30000 blocks to make room for the
+// swap area at blocks [SWAPBASE=2000, SWAPBASE+SWAPMAX=30000).
+// Delete fs.img and rebuild after changing this.
+#define FSSIZE       30000
 #define MAXPATH      128   // maximum file path name
 #define USERSTACK    1     // user stack pages
 

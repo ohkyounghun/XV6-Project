@@ -89,7 +89,21 @@ kexec(char *path, char **argv)
   if((sz1 = uvmalloc(pagetable, sz, sz + (USERSTACK+1)*PGSIZE, PTE_W)) == 0)
     goto bad;
   sz = sz1;
-  uvmclear(pagetable, sz-(USERSTACK+1)*PGSIZE);
+  uint64 guardva = sz-(USERSTACK+1)*PGSIZE;
+  uvmclear(pagetable, guardva);
+  // This stack-guard-page LRU cleanup was written with Claude assistance for the
+  // assignment; it is not in the Xv6_part4_PageReplacement.pptx spec — it fixes a
+  // dangling LRU node that the pptx's add/remove rules (Slide 22) do not anticipate.
+  // PA4: uvmalloc mapped the guard page with PTE_U, so mappages registered its
+  // frame on the LRU list. uvmclear just stripped PTE_U to make it inaccessible.
+  // That breaks an invariant uvmunmap relies on: it only calls lru_remove when
+  // PTE_U is set, so at process exit this frame would be kfree'd while its LRU
+  // node still points at this (soon-to-be-freed) page table — a dangling node
+  // that later crashes lru_select_victim's walk(). An inaccessible guard page
+  // must never be a swap victim anyway, so unlink it from the LRU here.
+  pte_t *gpte = walk(pagetable, guardva, 0);
+  if(gpte && (*gpte & PTE_V))
+    lru_remove(PTE2PA(*gpte));
   sp = sz;
   stackbase = sp - USERSTACK*PGSIZE;
 

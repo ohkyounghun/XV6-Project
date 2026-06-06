@@ -28,6 +28,9 @@ main()
     iinit();         // inode table
     fileinit();      // file table
     virtio_disk_init(); // emulated hard disk
+    swapinit();      // PA4 Slide 21: initialize swap-slot bitmap (calls kalloc once; must run after kinit).
+    lruinit();       // PA4 Slide 22: initialize the circular LRU page list and pages[] array.
+    lru_active = 1;  // PA4: from now on kfree() may safely unlink frames from the LRU (lru.lock is initialized).
     userinit();      // first user process
     __sync_synchronize();
     started = 1;

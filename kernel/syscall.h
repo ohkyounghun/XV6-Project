@@ -28,3 +28,6 @@
 #define SYS_mmap    27 // Slide 11 mmap() syscall: assign the next free number so the kernel can identify this Project 3 syscall.
 #define SYS_munmap  28 // Slide 26 munmap() syscall: assign the next free number so the kernel can identify this Project 3 syscall.
 #define SYS_freemem 29 // Slide 27 freemem() syscall: assign the next free number so the kernel can identify this Project 3 syscall.
+// PA4 Slide 16/26: swapstat() is a provided helper; the test programs (Slide 26) call it
+// from user space to read cumulative disk-block read/write counters and verify swap activity.
+#define SYS_swapstat 30

@@ -165,6 +165,10 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     if(*pte & PTE_V)
       panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
+    // PA4 Slide 22: track user frames in the LRU list as they are mapped.
+    // Page-table pages and kernel pages (no PTE_U) are never added.
+    if(perm & PTE_U)
+      lru_add(pagetable, a, pa);
     if(a == last)
       break;
     a += PGSIZE;
@@ -202,7 +206,11 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     if((pte = walk(pagetable, a, 0)) == 0) // leaf page table entry allocated?
       continue;   
     if((*pte & PTE_V) == 0)  // has physical page been allocated?
-      continue;
+      continue;              // (PTE_S pages live in swap: PTE_V==0, skipped here)
+    // PA4 Slide 22: stop tracking a user frame the moment its mapping is torn
+    // down, so the LRU bookkeeping matches the live user mappings.
+    if(*pte & PTE_U)
+      lru_remove(PTE2PA(*pte));
     if(do_free){
       uint64 pa = PTE2PA(*pte);
       kfree((void*)pa);
@@ -304,13 +312,36 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       continue;   // page table entry hasn't been allocated
+    // PA4 (fork support): a swapped-out page (PTE_V==0 && PTE_S==1) has no
+    // resident frame to copy. Restore it into the parent first; swap_in
+    // rewrites *pte in place to a valid, resident mapping, so the normal copy
+    // path below then sees an ordinary present page. The PTE pointer stays
+    // valid because page-table pages are never evicted.
+    if((*pte & PTE_V) == 0 && (*pte & PTE_S)){
+      if(swap_in(old, i) != 0)
+        goto err;
+    }
     if((*pte & PTE_V) == 0)
       continue;   // physical page hasn't been allocated
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
+    // This pin pattern was written with Claude assistance for the assignment; it
+    // is an implementation detail not covered by Xv6_part4_PageReplacement.pptx
+    // (fork-with-swap is required by Test 4 / Slide 40-41, but the self-eviction
+    // hazard during the copy is not described).
+    // PA4: pin the source frame before kalloc(). kalloc() may run swap_out(),
+    // and the clock could pick THIS very page (it is a resident user page on
+    // the LRU) as the victim — swap_out() would then hand `pa` straight back as
+    // `mem`, so memmove(mem, pa) copies a junk-filled frame and the child gets
+    // garbage. Unlinking pa from the LRU makes it ineligible for eviction for
+    // the duration of the copy; we re-register it immediately afterward.
+    lru_remove(pa);
+    if((mem = kalloc()) == 0){
+      lru_add(old, i, pa);                 // restore LRU state before bailing
       goto err;
+    }
     memmove(mem, (char*)pa, PGSIZE);
+    lru_add(old, i, pa);                    // source is copied; allow eviction again
     if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
       kfree(mem);
       goto err;
@@ -415,8 +446,20 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   while(got_null == 0 && max > 0){
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
+    if(pa0 == 0){
+      // This swap-aware retry in copyinstr was written with Claude assistance for
+      // the assignment; like the vmfault case it is beyond the pptx spec.
+      // PA4: a swapped-out page reads as unmapped (PTE_V==0); restore it from
+      // swap before giving up, so kernel string reads see the real contents.
+      pte_t *spte = walk(pagetable, va0, 0);
+      if(spte && (*spte & PTE_V) == 0 && (*spte & PTE_S)){
+        if(swap_in(pagetable, va0) != 0)
+          return -1;
+        pa0 = walkaddr(pagetable, va0);
+      }
+      if(pa0 == 0)
+        return -1;
+    }
     n = PGSIZE - (srcva - va0);
     if(n > max)
       n = max;
@@ -458,6 +501,23 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
   if (va >= p->sz)
     return 0;
   va = PGROUNDDOWN(va);
+  // This swap-aware branch in vmfault was written with Claude assistance for the
+  // assignment; it is not in the Xv6_part4_PageReplacement.pptx spec — the pptx
+  // covers swap-in from the trap handler (Slide 18) but not the copyin/copyout
+  // path that reaches vmfault directly and bypasses that check.
+  // PA4: a swapped-out page reads as "not mapped" (PTE_V==0) but is NOT an
+  // unallocated lazy page — it has live contents parked in a swap slot. The
+  // trap handler swaps such pages in before reaching here, but copyin/copyout
+  // call vmfault() directly (walkaddr() returns 0 for PTE_V==0, which is also
+  // true for swapped pages), so we must handle it here too. Allocating a fresh
+  // zero page would clobber the swap-slot reference in the PTE and destroy the
+  // page's contents. Restore it from swap instead.
+  pte_t *spte = walk(pagetable, va, 0);
+  if(spte && (*spte & PTE_V) == 0 && (*spte & PTE_S)){
+    if(swap_in(pagetable, va) != 0)
+      return 0;
+    return walkaddr(pagetable, va);
+  }
   if(ismapped(pagetable, va)) {
     return 0;
   }

@@ -63,6 +63,26 @@ void            kinit(void);
 uint64          freemem(void); // for meminfo() — returns bytes
 uint64          freemem_pages(void); // Slide 27 PA3 helper that returns the free-page count for the freemem() syscall.
 
+// swap.c — PA4 Slide 16: swapinit/read/write/stat/alloc/free are provided helpers;
+//          swap_out (Slide 13) and swap_in (Slide 18) are student TODO functions.
+void            swapinit(void);
+void            swapread(uint64 ptr, int blkno);
+void            swapwrite(uint64 ptr, int blkno);
+void            swapstat(int *nr_sectors_read, int *nr_sectors_write);
+int             swap_alloc_slot(void);
+void            swap_free_slot(uint slot);
+void           *swap_out(void);  // PA4 Slide 13: pick a victim via Clock, write to swap area, return freed frame.
+int             swap_in(pagetable_t pt, uint64 va); // PA4 Slide 18/19: page-fault handler entry; restore a swapped-out page.
+
+// lru.c — PA4 Slide 22: add/remove called from mappages/uvmunmap;
+//          lru_select_victim (Slide 24) implements the Clock algorithm.
+void            lruinit(void);
+void            lru_add(pagetable_t pt, uint64 va, uint64 pa);    // PA4 Slide 22: insert frame at LRU-list tail when a user PTE is created.
+void            lru_remove(uint64 pa);                             // PA4 Slide 22: unlink frame from LRU list when a valid user PTE is torn down.
+int             lru_size(void);
+uint64          lru_select_victim(pagetable_t *out_pt, uint64 *out_va); // PA4 Slide 24: Clock walk — clear PTE_A for recently-used, evict first unaccessed.
+extern int      lru_active; // PA4: set once lruinit() has run so kfree() knows the LRU is safe to touch (defined in kalloc.c).
+
 // mmap.c (Project 3 — Virtual Memory)
 uint64          mmap(uint64 addr, int length, int prot, int flags, int fd, int offset); // Slide 11 mmap() body shared between sys_mmap and any kernel-internal callers.
 int             munmap(uint64 addr); // Slide 26 munmap() body — Part B implements the full removal logic in kernel/mmap.c.

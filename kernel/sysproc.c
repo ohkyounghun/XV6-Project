@@ -190,6 +190,27 @@ sys_munmap(void)
   return munmap(addr); // Slide 26 return contract: 1 on success, -1 on failure (Part B implements the actual logic).
 }
 
+// PA4 Slide 16/26: sys_swapstat exposes the cumulative disk-block read/write counters to
+// user space.  The test programs (pa4_test) call swapstat() around each workload to
+// compute per-test swap-page deltas.  Both pointer arguments are copyout'd individually
+// so the user can pass NULL for either counter without faulting.
+uint64
+sys_swapstat(void)
+{
+  uint64 ra_addr, wa_addr;
+  int r, w;
+
+  argaddr(0, &ra_addr);
+  argaddr(1, &wa_addr);
+  swapstat(&r, &w);
+
+  if(copyout(myproc()->pagetable, ra_addr, (char *)&r, sizeof(r)) < 0)
+    return -1;
+  if(copyout(myproc()->pagetable, wa_addr, (char *)&w, sizeof(w)) < 0)
+    return -1;
+  return 0;
+}
+
 // This sys_freemem() wrapper was written with Claude assistance for the assignment.
 // Slide 27 of the project spec asks for the current number of free physical memory pages, so we forward to freemem_pages() which keeps an O(1) counter.
 uint64

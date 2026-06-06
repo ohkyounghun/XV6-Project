@@ -239,8 +239,22 @@ found:
     p->mmap_areas[i].p      = 0; // Reset the owner pointer so back-references match the new struct proc after allocation completes.
   }
 
+  // This p->lock drop was written with Claude assistance for the assignment; it
+  // is beyond the Xv6_part4_PageReplacement.pptx spec, which never notes that a
+  // sleep-capable kalloc() makes allocproc's locked allocations panic ("sched locks").
+  // PA4: drop p->lock for the allocation phase below. Under memory pressure
+  // kalloc() falls through to swap_out(), which sleeps on disk I/O; sched()
+  // panics with "sched locks" if any spinlock is held across a sleep. Both the
+  // trapframe kalloc() and proc_pagetable() (its uvmcreate/mappages walk with
+  // alloc=1) can reach kalloc(), so neither may run under the lock. p is in
+  // USED state here — not RUNNABLE, not yet anyone's child, and other allocproc
+  // scans skip non-UNUSED slots — so no other CPU will touch it meanwhile.
+  // (kfork drops np->lock around uvmcopy for exactly the same reason.)
+  release(&p->lock);
+
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
+    acquire(&p->lock);
     freeproc(p);
     release(&p->lock);
     return 0;
@@ -249,10 +263,15 @@ found:
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
+    acquire(&p->lock);
     freeproc(p);
     release(&p->lock);
     return 0;
   }
+
+  // Re-acquire p->lock so allocproc keeps its "returns with p->lock held"
+  // contract for callers (userinit, kfork).
+  acquire(&p->lock);
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -386,8 +405,19 @@ kfork(void)
     return -1;
   }
 
+  // This np->lock drop was written with Claude assistance for the assignment; it
+  // is beyond the Xv6_part4_PageReplacement.pptx spec — the pptx does not mention
+  // that making kalloc() sleep turns fork's locked copy phase into a "sched locks" hazard.
+  // PA4: drop np->lock for the memory-copy phase. uvmcopy() and the mmap clone
+  // below may invoke swap_out(), which sleeps on disk I/O; sched() panics with
+  // "sched locks" if any spinlock is held across a sleep. np is in USED state
+  // here — not RUNNABLE and not yet anyone's child — so no other CPU will touch
+  // it while its lock is dropped. We re-acquire it only on the paths that need it.
+  release(&np->lock);
+
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+    acquire(&np->lock);
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -433,11 +463,22 @@ kfork(void)
       if(pte == 0 || (*pte & PTE_V) == 0)
         continue; // Leave lazy, never-faulted pages untouched so the child faults them in later on demand.
 
+      // This pin pattern was written with Claude assistance for the assignment;
+      // it is not in the Xv6_part4_PageReplacement.pptx spec — the self-eviction
+      // hazard during fork's page copy is an implementation detail the pptx omits.
+      // PA4: pin the parent's source frame across kalloc() — kalloc() may
+      // swap_out() and the clock could evict THIS page, handing it back as
+      // `mem` and corrupting the copy (same hazard as uvmcopy).
+      uint64 src = PTE2PA(*pte);
+      lru_remove(src);
       mem = kalloc(); // Allocate a new physical page so the child does not share writable mmap pages directly with the parent.
-      if(mem == 0)
+      if(mem == 0){
+        lru_add(p->pagetable, va, src); // re-register the pinned source before bailing
         goto bad; // Abort fork cleanly when physical memory is exhausted during mmap page cloning.
+      }
 
-      memmove(mem, (char *)PTE2PA(*pte), PGSIZE); // Copy the parent's current page contents so file-backed and anonymous mappings preserve visible data.
+      memmove(mem, (char *)src, PGSIZE); // Copy the parent's current page contents so file-backed and anonymous mappings preserve visible data.
+      lru_add(p->pagetable, va, src); // source copied; allow it to be evicted again
       if(mappages(np->pagetable, va, PGSIZE, (uint64)mem, PTE_FLAGS(*pte)) != 0) {
         kfree(mem); // Return the page before aborting if the child PTE cannot be installed.
         goto bad; // Reuse the common fork failure path so freeproc() cleans partial mmap metadata/pages for us.
@@ -447,7 +488,7 @@ kfork(void)
 
   pid = np->pid;
 
-  release(&np->lock);
+  // np->lock was already dropped before the copy phase above; nothing to release here.
 
   acquire(&wait_lock);
   np->parent = p;
@@ -460,6 +501,7 @@ kfork(void)
   return pid;
 
 bad:
+  acquire(&np->lock); // np->lock was dropped for the copy phase; re-take it for freeproc's contract.
   freeproc(np); // Release any partially copied mmap pages/metadata and ordinary process resources before returning failure.
   release(&np->lock); // Match allocproc's locked return convention before leaving through the error path.
   return -1; // Propagate fork failure to user space when mmap page cloning cannot be completed.

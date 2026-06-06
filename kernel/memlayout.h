@@ -37,7 +37,16 @@
 // for use by the kernel and user pages
 // from physical address 0x80000000 to PHYSTOP.
 #define KERNBASE 0x80000000L
-#define PHYSTOP (KERNBASE + 128*1024*1024)
+// PA4 Slide 27: shrink PHYSTOP so the 1000-page tests actually exhaust RAM and trigger swap.
+// Slide 28 notes that sizing pages[] by (PHYSTOP-KERNBASE)/PGSIZE avoids the ~17 MiB BSS
+// waste that results from a naive PHYSTOP/PGSIZE array (which would include the non-RAM region below KERNBASE).
+#define PHYSTOP (KERNBASE + 4*1024*1024 + 512*1024)  // 4.5 MiB
+
+// PA4 Slide 21: blocks [SWAPBASE, SWAPBASE+SWAPMAX) at the tail of the expanded fs.img
+// are reserved as the swap area.  One page (4096 B) = 4 disk blocks (1024 B each),
+// so SWAPMAX/4 = 7000 page-sized swap slots are available.
+#define SWAPBASE 2000
+#define SWAPMAX  28000
 
 // map the trampoline page to the highest address,
 // in both user and kernel space.

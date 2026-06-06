@@ -14,6 +14,12 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
+// PA4: 0 until lruinit() has run (set in main()). Boot-time frees in kinit()
+// happen before the LRU exists, so kfree() must not touch it until this is set.
+// This lru_active guard was written with Claude assistance for the assignment;
+// the boot-ordering hazard it solves is not covered by Xv6_part4_PageReplacement.pptx.
+int lru_active = 0;
+
 struct run {
   struct run *next;
 };
@@ -52,6 +58,20 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  // PA4: enforce the invariant "a frame on the freelist is never on the LRU".
+  // uvmunmap() already unlinks ordinary user pages before freeing them, but a
+  // few paths free a frame whose PTE_U was stripped after mapping (e.g. exec's
+  // stack-guard page). If such a frame's LRU node lingered, lru_select_victim()
+  // would later walk() a freed/reused page table through the stale node and
+  // either corrupt an unrelated process's frame or panic. lru_remove() is
+  // idempotent (a no-op when the frame isn't tracked), so this is safe for
+  // page-table pages, kernel pages, and already-unlinked user pages alike.
+  // This kfree() LRU backstop was written with Claude assistance for the
+  // assignment; it is beyond the Xv6_part4_PageReplacement.pptx spec, which only
+  // specifies removing a page from the LRU inside uvmunmap (Slide 14/22).
+  if(lru_active)
+    lru_remove((uint64)pa);
+
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
@@ -80,9 +100,24 @@ kalloc(void)
   }
   release(&kmem.lock);
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
-  return (void*)r;
+    return (void*)r;
+  }
+
+  // PA4: freelist is empty — reclaim a frame by swapping one user page out.
+  // This MUST be called AFTER releasing kmem.lock: swap_out does disk I/O via
+  // swapwrite (sleeplock) and also takes lru.lock, so calling it while holding
+  // kmem.lock would deadlock. swap_out returns the pa of the now-unmapped
+  // frame directly, so it bypasses the freelist and serves this request.
+  void *pa = swap_out();
+  if(pa){
+    memset((char*)pa, 5, PGSIZE); // fill with junk (swap_in overwrites it all soon)
+    return pa;
+  }
+
+  // swap_out also returned 0 -> no user page to evict and no free swap slot = true OOM.
+  return 0;
 }
 
 // AI was used (ChatGPT provided guidance on freelist traversal algorithm)
