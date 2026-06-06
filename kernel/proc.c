@@ -460,6 +460,14 @@ kfork(void)
       pte_t *pte = walk(p->pagetable, va, 0); // Check whether the parent has already materialized this mmap page.
       char *mem; // Allocate a fresh child physical page only when the parent mapping already has a valid page to copy.
 
+      // PA4: if the parent's mmap page is swapped out, bring it back so we can
+      // copy it into the child — otherwise the child would start with a zero page
+      // and the parent's written data would be silently lost.
+      if(pte && (*pte & PTE_S)){
+        if(swap_in(p->pagetable, va) != 0)
+          goto bad;
+        pte = walk(p->pagetable, va, 0);
+      }
       if(pte == 0 || (*pte & PTE_V) == 0)
         continue; // Leave lazy, never-faulted pages untouched so the child faults them in later on demand.
 

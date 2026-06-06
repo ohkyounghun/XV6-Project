@@ -117,6 +117,8 @@ kalloc(void)
   }
 
   // swap_out also returned 0 -> no user page to evict and no free swap slot = true OOM.
+  // Part4 Slide 29: print a message when physical memory is truly exhausted.
+  printf("kalloc: out of memory\n");
   return 0;
 }
 

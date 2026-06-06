@@ -238,6 +238,9 @@ cleanup_proc_mmap(struct proc *p)
         uint64 pa = PTE2PA(*pte);
         kfree((void*)pa);                       // Slide 27: returning the page bumps the free-page counter so freemem() reflects the cleanup.
         *pte = 0;                               // Clear the leaf so the subsequent freewalk() sees a clean table.
+      } else if (pte && (*pte & PTE_S)) {       // PA4: swapped-out mmap page — reclaim its swap slot or it leaks at process exit.
+        swap_free_slot(PTE2SLOT(*pte));
+        *pte = 0;
       }
     }
     if (m->f) fileclose(m->f);                  // Slide 14~17: release the filedup'd reference for file-backed mappings.
@@ -272,8 +275,14 @@ munmap(uint64 addr)
     pte_t *pte = walk(p->pagetable, va, 0); // Probe the leaf PTE without allocating intermediate tables because lazy pages may still be absent.
     if(pte == 0)
       continue; // Missing page-table levels mean this page was never faulted in, so there is nothing to free.
-    if((*pte & PTE_V) == 0)
-      continue; // Invalid leaf entries are also fine for lazy pages that were recorded but never allocated.
+    if((*pte & PTE_V) == 0){
+      // PA4: swapped-out page inside the munmap'd region — free its slot.
+      if(*pte & PTE_S){
+        swap_free_slot(PTE2SLOT(*pte));
+        *pte = 0;
+      }
+      continue;
+    }
     kfree((void *)PTE2PA(*pte)); // Free only the physical pages that were actually allocated so freemem() rises by the correct amount.
     *pte = 0; // Clear the leaf entry so later walks and freewalk() see the page as unmapped.
   }

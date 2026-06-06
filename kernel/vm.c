@@ -205,8 +205,15 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0) // leaf page table entry allocated?
       continue;   
-    if((*pte & PTE_V) == 0)  // has physical page been allocated?
-      continue;              // (PTE_S pages live in swap: PTE_V==0, skipped here)
+    if((*pte & PTE_V) == 0){
+      // PA4: swapped-out pages have PTE_V==0 but PTE_S==1; their swap slot must
+      // be returned here or it leaks forever (process exit, sbrk shrink, munmap).
+      if(*pte & PTE_S){
+        swap_free_slot(PTE2SLOT(*pte));
+        *pte = 0;
+      }
+      continue;
+    }
     // PA4 Slide 22: stop tracking a user frame the moment its mapping is torn
     // down, so the LRU bookkeeping matches the live user mappings.
     if(*pte & PTE_U)
